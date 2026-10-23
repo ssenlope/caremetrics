@@ -36,11 +36,6 @@ class Beneficiary(Base):
 
 class Claim(Base):
     __tablename__ = "claims"
-    __table_args__ = (
-        CheckConstraint("units > 0", name="ck_claims_units_positive"),
-        CheckConstraint("billed_amount >= 0", name="ck_claims_billed_nonneg"),
-        CheckConstraint("paid_amount >= 0", name="ck_claims_paid_nonneg"),
-    )
 
     claim_id: Mapped[str] = mapped_column(String(30), primary_key=True)
     bene_id: Mapped[str] = mapped_column(
@@ -50,8 +45,22 @@ class Claim(Base):
         String(10), ForeignKey("providers.npi"), nullable=False
     )
     service_date: Mapped[date] = mapped_column(Date, nullable=False)
-    hcpcs_code: Mapped[str] = mapped_column(String(10), nullable=False)
     diagnosis_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+
+class ClaimLine(Base):
+    __tablename__ = "claim_lines"
+    __table_args__ = (
+        CheckConstraint("units > 0", name="ck_lines_units_positive"),
+        CheckConstraint("billed_amount >= 0", name="ck_lines_billed_nonneg"),
+        CheckConstraint("paid_amount >= 0", name="ck_lines_paid_nonneg"),
+    )
+
+    claim_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("claims.claim_id"), primary_key=True
+    )
+    line_num: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hcpcs_code: Mapped[str] = mapped_column(String(10), nullable=False)
     units: Mapped[int] = mapped_column(Integer, nullable=False)
     billed_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paid_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
