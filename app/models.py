@@ -75,3 +75,23 @@ class ProviderRiskScore(Base):
     period: Mapped[date] = mapped_column(Date, primary_key=True)
     score: Mapped[Decimal] = mapped_column(Numeric(6, 3), nullable=False)
     reasons: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+from datetime import datetime  # noqa: E402
+from sqlalchemy import BigInteger, DateTime, UniqueConstraint, func  # noqa: E402
+
+
+class RejectedRow(Base):
+    __tablename__ = "rejected_rows"
+    __table_args__ = (
+        UniqueConstraint("source_table", "row_hash", name="uq_rejected_source_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source_table: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    raw_row: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    row_hash: Mapped[str] = mapped_column(String(32), nullable=False)
+    rejected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
