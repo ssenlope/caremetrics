@@ -94,6 +94,25 @@ Injected 2,765 faults (about 0.1% of rows) across 7 fault types into a copy of t
 - **Trade-off:** Rules were designed with knowledge of the injected patterns, and the price baseline is the dataset's own median, so results overstate real-world performance. Quarterly periods trade time resolution for less noise (about 8 claims per provider per month).
 - **Verified by:** pytest on a hand-built dataset; re-running scoring rewrites the same rows.
 
+## Detection Results (v1, untuned)
+Provider score = mean of quarterly risk scores. Evaluated against 100 injected anomalous providers (2% base rate) out of 5,000.
+
+| K | Precision@K | Recall@K | Lift vs random |
+|---|---|---|---|
+| 50 | 86% | 43% | 43x |
+| 100 | 67% | 67% | 33.5x |
+| 200 | 39% | 78% | 19.5x |
+
+Recall@100 by fraud type: inflated price 100%, duplicate billing 64%, high volume 38%.
+
+Findings:
+- Price inflation is detected cleanly (0 false positives on the rule).
+- High-volume detection is weakest: the injected 8x multiplier is close to natural long-tail variation, and the rule fires on about 1.9% of normal provider-quarters.
+- Averaging rule scores dilutes providers that match only one pattern.
+
+These scores overstate real-world performance: the rules were written knowing the injected patterns, and nothing was tuned on a held-out set.
+
+
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
