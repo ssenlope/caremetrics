@@ -82,6 +82,12 @@ Injected 2,765 faults (about 0.1% of rows) across 7 fault types into a copy of t
 - **Why:** Bad data cannot get in through any path.
 - **Trade-off:** Constraints add write overhead.
 
+### 7. Explicit grain in analytics queries
+- **Decision:** Aggregations are hand-written SQL. Claim counts use COUNT(DISTINCT claim_id); line counts and amounts come from claim_lines; average unit price is SUM(billed)/SUM(units).
+- **Why:** In a header-detail model, COUNT(*) after joining lines silently inflates claim counts (about 1.65x here), and averaging per-line prices ignores units.
+- **Trade-off:** Offset pagination is simple but slows on deep pages; keyset pagination would fix that.
+- **Verified by:** pytest on a hand-built dataset; per-state claim and line counts sum to 1,000,755 and 1,650,522.
+
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
