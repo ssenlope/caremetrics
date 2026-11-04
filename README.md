@@ -120,3 +120,4 @@ These scores overstate real-world performance: the rules were written knowing th
 - ON CONFLICT DO NOTHING ignores corrected versions of an existing claim.
 - Benchmarks are single local runs, not medians of repeated runs.
 - No analytics API, anomaly detection, or index optimization yet.
+- CI runs unit tests on small hand-built datasets; the 1M-row load, scoring and evaluation are run locally.
