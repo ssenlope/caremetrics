@@ -1,4 +1,5 @@
 # CareMetrics
+![CI](https://github.com/ssenlope/caremetrics/actions/workflows/ci.yml/badge.svg)
 
 Healthcare claims analytics and fraud detection backend built with Python, FastAPI, PostgreSQL, and Docker. Works on synthetic Medicare-style claims (1M claims, 1.65M service lines) with injected fraud patterns and a ground-truth file for measuring detection quality.
 
