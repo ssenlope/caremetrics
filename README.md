@@ -88,6 +88,12 @@ Injected 2,765 faults (about 0.1% of rows) across 7 fault types into a copy of t
 - **Trade-off:** Offset pagination is simple but slows on deep pages; keyset pagination would fix that.
 - **Verified by:** pytest on a hand-built dataset; per-state claim and line counts sum to 1,000,755 and 1,650,522.
 
+### 8. Configurable rule engine with explainable scores
+- **Decision:** Each rule (high volume, price inflation, duplicate billing) is an independent class with a name, weight and thresholds, producing a 0 to 1 score per provider per quarter. The risk score is the weighted average; rules scoring >= 0.5 are stored in `reasons` (JSONB).
+- **Why:** Rules stay testable and tunable on their own, and every flagged provider comes with an explanation. Volume uses log counts and peer z-scores by specialty because claim volume is long-tailed.
+- **Trade-off:** Rules were designed with knowledge of the injected patterns, and the price baseline is the dataset's own median, so results overstate real-world performance. Quarterly periods trade time resolution for less noise (about 8 claims per provider per month).
+- **Verified by:** pytest on a hand-built dataset; re-running scoring rewrites the same rows.
+
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
