@@ -125,12 +125,24 @@ Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migrati
 | monthly_volume | 117.4 ms | 110.4 ms | 1.1x |
 | hcpcs_pricing | 93.0 ms | 92.7 ms | 1.0x |
 | state_spend | 2,558 ms | 2,552 ms | 1.0x |
-| state_spend (EXPLAIN ANALYZE, Median)| 2,558 ms | 779 ms | about 3.3x|
 
 Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet measured.
 
 Takeaway: indexes fixed lookups by provider but did nothing for full-table aggregations
-(state_spend, hcpcs_pricing, rule scoring), which need a different approach.
+(state_spend, hcpcs_pricing, rule scoring). For state_spend, rewriting the query helped; see below.
+## Query Rewrite: state_spend (round 2)
+**Problem:** Adding indexes did not help `state_spend` (2,558 ms). The plan showed the time was spent in the aggregation, not in finding rows: `COUNT(DISTINCT ...)` forced the database to sort 1.65M joined rows by (state, npi), spilling about 30 MB per worker to disk.
+
+**Change:** Aggregate before joining. Lines are summed per claim, claims per provider, and providers per state. Each claim then appears once, so no DISTINCT is needed and the final grouping runs on 5,000 rows instead of 1.65M.
+
+**Correctness:** The old and new queries were compared with `EXCEPT` in both directions: 0 differing rows across all 20 states and every column. API totals still sum to 1,000,755 claims and 1,650,522 lines.
+
+| Measure | Before | After | Speedup |
+|---|---|---|---|
+| EXPLAIN ANALYZE (median of 3) | 2,558 ms | 779 ms | about 3.3x |
+| API response via curl (3 runs) | about 2.41 s | about 0.65 s | about 3.7x |
+
+**Trade-off:** The SQL is longer and harder to read. It relies on `claim_id` being unique in `claims`, which the primary key guarantees.
 
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
