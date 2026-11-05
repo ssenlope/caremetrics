@@ -9,6 +9,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Index, #索引update测试
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -36,7 +37,11 @@ class Beneficiary(Base):
 
 class Claim(Base):
     __tablename__ = "claims"
-
+    # 索引update测试
+    __table_args__ = (
+        Index("ix_claims_npi_service_date", "npi", "service_date"),
+        Index("ix_claims_service_date", "service_date"),
+    )
     claim_id: Mapped[str] = mapped_column(String(30), primary_key=True)
     bene_id: Mapped[str] = mapped_column(
         String(20), ForeignKey("beneficiaries.bene_id"), nullable=False

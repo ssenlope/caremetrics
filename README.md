@@ -114,6 +114,23 @@ Findings:
 These scores overstate real-world performance: the rules were written knowing the injected patterns, and nothing was tuned on a held-out set.
 
 
+## Index Optimization (round 1)
+Method: EXPLAIN (ANALYZE) execution time, median of 5 runs, 1M claims / 1.65M lines, local.
+Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migration.
+
+| Query | Before | After | Speedup |
+|---|---|---|---|
+| provider_summary | 15.4 ms | 0.5 ms | 31x |
+| provider_claims (date range) | 16.5 ms | 0.1 ms | 165x |
+| monthly_volume | 117.4 ms | 110.4 ms | 1.1x |
+| hcpcs_pricing | 93.0 ms | 92.7 ms | 1.0x |
+| state_spend | 2,558 ms | 2,552 ms | 1.0x |
+
+Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet measured.
+
+Takeaway: indexes fixed lookups by provider but did nothing for full-table aggregations
+(state_spend, hcpcs_pricing, rule scoring), which need a different approach.
+
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
