@@ -125,6 +125,7 @@ Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migrati
 | monthly_volume | 117.4 ms | 110.4 ms | 1.1x |
 | hcpcs_pricing | 93.0 ms | 92.7 ms | 1.0x |
 | state_spend | 2,558 ms | 2,552 ms | 1.0x |
+| state_spend (EXPLAIN ANALYZE, Median)| 2,558 ms | 779 ms | about 3.3x|
 
 Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet measured.
 
