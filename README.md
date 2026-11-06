@@ -4,7 +4,7 @@
 Healthcare claims analytics and fraud detection backend built with Python, FastAPI, PostgreSQL, and Docker. Works on synthetic Medicare-style claims (1M claims, 1.65M service lines) with injected fraud patterns and a ground-truth file for measuring detection quality.
 
 ## Status
-In progress. Done: data model, synthetic data generator, idempotent bulk loader, validation with rejected-rows table, tests. Next: analytics API, rule-based anomaly detection with precision/recall, index optimization with before/after benchmarks.
+Core functionality complete: data model, synthetic data generator, idempotent bulk loader, validation with rejected-rows table, analytics API, rule-based risk scoring with precision/recall evaluation, index optimization and query rewrites with before/after benchmarks, tests and CI. Remaining polish: architecture notes and a clean-clone verification of the Quick Start.
 
 ## Quick Start
 
@@ -14,6 +14,8 @@ docker compose exec api alembic upgrade head
 docker compose exec api python -m etl.generate_data --seed 42 --out data
 docker compose exec api python -m etl.generate_claims --claims 1000000 --seed 42 --out data
 docker compose exec api python -m etl.load_validated --data data
+docker compose exec api python -m app.services.risk_engine --grain quarter
+docker compose exec api python -m app.services.evaluate --truth data/ground_truth.csv
 docker compose exec api python -m pytest -q
 ```
 
@@ -30,10 +32,10 @@ provider_risk_scores  PK (npi, period), score, reasons JSONB
 rejected_rows         source_table, reason, raw_row JSONB, row_hash (unique per table)
 ```
 
-Only primary-key indexes exist for now, so there is a clean baseline for later optimization.
+Secondary indexes: `claims(npi, service_date)` and `claims(service_date)`, added by a separate migration after the baseline benchmarks (see Index Optimization). Everything else has primary-key indexes only.
 
 ## Benchmarks
-Local, Apple silicon, Docker Desktop, PostgreSQL 16, single runs.
+Local, Apple silicon, Docker Desktop, PostgreSQL 16, single runs. Load benchmarks were measured before the secondary indexes above existed.
 
 | Step | Rows | Time | Throughput |
 |------|------|------|------------|
@@ -84,7 +86,7 @@ Injected 2,765 faults (about 0.1% of rows) across 7 fault types into a copy of t
 - **Trade-off:** Constraints add write overhead.
 
 ### 7. Explicit grain in analytics queries
-- **Decision:** Aggregations are hand-written SQL. Claim counts use COUNT(DISTINCT claim_id); line counts and amounts come from claim_lines; average unit price is SUM(billed)/SUM(units).
+- **Decision:** Aggregations are hand-written SQL. Claim counts use COUNT(DISTINCT claim_id); line counts and amounts come from claim_lines; average unit price is SUM(billed)/SUM(units). (`state_spend` was later restructured to aggregate per claim first; see Query Rewrites.)
 - **Why:** In a header-detail model, COUNT(*) after joining lines silently inflates claim counts (about 1.65x here), and averaging per-line prices ignores units.
 - **Trade-off:** Offset pagination is simple but slows on deep pages; keyset pagination would fix that.
 - **Verified by:** pytest on a hand-built dataset; per-state claim and line counts sum to 1,000,755 and 1,650,522.
@@ -113,7 +115,6 @@ Findings:
 
 These scores overstate real-world performance: the rules were written knowing the injected patterns, and nothing was tuned on a held-out set.
 
-
 ## Index Optimization (round 1)
 Method: EXPLAIN (ANALYZE) execution time, median of 5 runs, 1M claims / 1.65M lines, local.
 Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migration.
@@ -121,16 +122,19 @@ Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migrati
 | Query | Before | After | Speedup |
 |---|---|---|---|
 | provider_summary | 15.4 ms | 0.5 ms | 31x |
-| provider_claims (date range) | 16.5 ms | 0.1 ms | 165x |
+| provider_claims (date range) | 16.5 ms | about 0.1 to 0.2 ms | 80x or more |
 | monthly_volume | 117.4 ms | 110.4 ms | 1.1x |
 | hcpcs_pricing | 93.0 ms | 92.7 ms | 1.0x |
 | state_spend | 2,558 ms | 2,552 ms | 1.0x |
 
 Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet measured.
 
-Takeaway: indexes fixed lookups by provider but did nothing for full-table aggregations
-(state_spend, hcpcs_pricing, rule scoring). For state_spend, rewriting the query helped; see below.
+For `monthly_volume` the plan uses the new date index (bitmap scan on `claims`), but the time barely changes, most likely because it is dominated by the join and aggregation rather than by locating rows.
+
+Takeaway: indexes fixed lookups by provider but did nothing for full-table aggregations (state_spend, hcpcs_pricing, rule scoring). For state_spend and duplicate_billing, rewriting the query helped; see below.
+
 ## Query Rewrites (round 2)
+
 ### state_spend
 **Problem:** Adding indexes did not help `state_spend` (2,558 ms). The plan showed the time was spent in the aggregation, not in finding rows: `COUNT(DISTINCT ...)` forced the database to sort 1.65M joined rows by (state, npi), spilling about 30 MB per worker to disk.
 
@@ -150,24 +154,23 @@ Takeaway: indexes fixed lookups by provider but did nothing for full-table aggre
 
 **Change:** Replaced the self-join with a `LAG` window function over (bene, provider, code) ordered by date, so there is one sort instead of two.
 
-**Correctness:** A two-way `EXCEPT` on every column of the rule output returned 0 differing rows out of 39,546. Detection metrics are unchanged (precision@100 stayed at 67%).
+**Correctness:** A two-way `EXCEPT` on every column of the rule output returned 0 differing rows out of 39,546. Detection metrics are unchanged (precision@100 stayed at 67%, and all other metrics matched exactly after the change).
 
-All timings are the median of 5 runs.
+Timings below are the median of 5 runs.
+
 | Measure | Before | After | Speedup |
 |---|---|---|---|
-| EXPLAIN ANALYZE (median) | 6,300 ms | 3,890 ms | about 1.6x |
+| Rule query, EXPLAIN ANALYZE | 6,300 ms | 3,977 ms | about 1.6x |
+| Full scoring run (3 rules, single run) | 8.1 s | 6.0 s | about 1.35x |
 
 **Also tried:** Raising `work_mem` to 256 MB so the remaining sort stayed in memory. The query went from about 3.9 s to about 3.7 s, so the disk spill was not the main cost. I kept the default setting.
 
 **Trade-off:** The query is harder to read, and the remaining time is spent elsewhere (building and de-duplicating the 1.4M-row claim/code set), which I did not dig into further.
-Baseline 6.3 s. The plan showed the time went into sorting the same 1.4M-row intermediate result twice for a self-join (both sorts spilled about 75 MB to disk), and 1.4M rows being paired with themselves and then filtered out. Rewriting with a LAG window function (one sort per bene/provider/code group) cut it to about 3.9 s (1.6x). The rewrite was proven equivalent with a two-way EXCEPT on every column of the rule output (0 differing rows out of 39,546), so detection metrics are unchanged.
-
-I also tried raising work_mem to 256 MB so the remaining sort would stay in memory. The sort did move to memory, but the query only went from about 3.89 s to 3.74 s (within run-to-run noise), so the disk spill was not the main cost. I kept the default setting.
 
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
+- Rule thresholds were not tuned or validated on a held-out dataset.
 - ON CONFLICT DO NOTHING ignores corrected versions of an existing claim.
-- Benchmarks are single local runs, not medians of repeated runs.
-- No analytics API, anomaly detection, or index optimization yet.
+- Load benchmarks are single local runs; query timings are medians of 3 to 5 runs. Write overhead of the secondary indexes is not measured.
 - CI runs unit tests on small hand-built datasets; the 1M-row load, scoring and evaluation are run locally.
