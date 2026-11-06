@@ -172,5 +172,5 @@ Timings below are the median of 5 runs.
 - Fraud patterns are injected by rule, so detection results overstate real-world performance.
 - Rule thresholds were not tuned or validated on a held-out dataset.
 - ON CONFLICT DO NOTHING ignores corrected versions of an existing claim.
-- Load benchmarks are single local runs; query timings are medians of 3 to 5 runs. Write overhead of the secondary indexes is not measured.
+- Load benchmarks are single local runs; query timings are medians of 3 to 5 runs. Write overhead of the secondary indexes is only roughly indicated by two single runs.
 - CI runs unit tests on small hand-built datasets; the 1M-row load, scoring and evaluation are run locally.
