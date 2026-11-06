@@ -127,7 +127,7 @@ Added `claims(npi, service_date)` and `claims(service_date)` via Alembic migrati
 | hcpcs_pricing | 93.0 ms | 92.7 ms | 1.0x |
 | state_spend | 2,558 ms | 2,552 ms | 1.0x |
 
-Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet measured.
+Indexes add about 33 MB (claims primary key: 30 MB). A validated load of the same data took 30.0 s with the indexes versus 25.5 s without (single runs on a fresh clone, so only a rough indication of write overhead).
 
 For `monthly_volume` the plan uses the new date index (bitmap scan on `claims`), but the time barely changes, most likely because it is dominated by the join and aggregation rather than by locating rows.
 
