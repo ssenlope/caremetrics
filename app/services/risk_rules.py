@@ -97,6 +97,9 @@ class DuplicateRule:
         g = _check(grain)
         w = int(self.window_days)
         score = clip01("rate", self.rate_low, self.rate_high)
+        # LAG over (bene, provider, code) ordered by date: one sort instead of a
+        # self-join that sorted the same 1.4M rows twice. Proven equivalent to the
+        # old self-join with a two-way EXCEPT (0 differing rows).
         return f"""
         WITH pc AS (
             SELECT npi, date_trunc('{g}', service_date)::date AS period, COUNT(*) AS claim_count
@@ -104,14 +107,15 @@ class DuplicateRule:
         ), cl AS (
             SELECT DISTINCT c.claim_id, c.bene_id, c.npi, c.service_date, l.hcpcs_code
             FROM claims c JOIN claim_lines l ON l.claim_id = c.claim_id
+        ), lagged AS (
+            SELECT claim_id, npi, service_date,
+                   service_date - LAG(service_date) OVER (
+                       PARTITION BY bene_id, npi, hcpcs_code
+                       ORDER BY service_date, claim_id) AS gap
+            FROM cl
         ), dup AS (
-            SELECT DISTINCT b.claim_id, b.npi,
-                   date_trunc('{g}', b.service_date)::date AS period
-            FROM cl a JOIN cl b
-              ON a.bene_id = b.bene_id AND a.npi = b.npi AND a.hcpcs_code = b.hcpcs_code
-             AND a.claim_id <> b.claim_id
-             AND b.service_date BETWEEN a.service_date AND a.service_date + {w}
-             AND (b.service_date > a.service_date OR b.claim_id > a.claim_id)
+            SELECT DISTINCT claim_id, npi, date_trunc('{g}', service_date)::date AS period
+            FROM lagged WHERE gap <= {w}
         ), dc AS (
             SELECT npi, period, COUNT(*) AS dup_claims FROM dup GROUP BY 1, 2
         ), r AS (

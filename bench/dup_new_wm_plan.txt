@@ -1,0 +1,61 @@
+SET
+                                                                                         QUERY PLAN                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Left Join  (cost=413164.26..419444.06 rows=100076 width=63) (actual time=3668.414..3703.187 rows=39546 loops=1)
+   Hash Cond: (((claims.npi)::text = (dc.npi)::text) AND (((date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date) = dc.period))
+   Buffers: shared hit=13670 read=22387
+   ->  HashAggregate  (cost=35336.88..37088.21 rows=100076 width=23) (actual time=254.554..257.162 rows=39546 loops=1)
+         Group Key: claims.npi, (date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date
+         Batches: 1  Memory Usage: 7185kB
+         Buffers: shared hit=3964 read=6354
+         ->  Seq Scan on claims  (cost=0.00..27831.21 rows=1000755 width=15) (actual time=10.899..162.744 rows=1000755 loops=1)
+               Buffers: shared hit=3964 read=6354
+   ->  Hash  (cost=377584.10..377584.10 rows=16219 width=23) (actual time=3413.793..3413.796 rows=236 loops=1)
+         Buckets: 16384  Batches: 1  Memory Usage: 141kB
+         Buffers: shared hit=9706 read=16033
+         ->  Subquery Scan on dc  (cost=377259.72..377584.10 rows=16219 width=23) (actual time=3413.680..3413.764 rows=236 loops=1)
+               Buffers: shared hit=9706 read=16033
+               ->  HashAggregate  (cost=377259.72..377421.91 rows=16219 width=23) (actual time=3413.678..3413.753 rows=236 loops=1)
+                     Group Key: lagged.npi, ((date_trunc('quarter'::text, (lagged.service_date)::timestamp with time zone))::date)
+                     Batches: 1  Memory Usage: 801kB
+                     Buffers: shared hit=9706 read=16033
+                     ->  HashAggregate  (cost=371583.07..374421.39 rows=162190 width=27) (actual time=3413.015..3413.562 rows=797 loops=1)
+                           Group Key: lagged.claim_id, lagged.npi, (date_trunc('quarter'::text, (lagged.service_date)::timestamp with time zone))::date
+                           Batches: 1  Memory Usage: 6225kB
+                           Buffers: shared hit=9706 read=16033
+                           ->  Subquery Scan on lagged  (cost=293183.27..367456.76 rows=550174 width=27) (actual time=3044.690..3412.663 rows=1110 loops=1)
+                                 Filter: (lagged.gap <= 3)
+                                 Rows Removed by Filter: 1425315
+                                 Buffers: shared hit=9706 read=16033
+                                 ->  WindowAgg  (cost=293183.27..342698.93 rows=1650522 width=48) (actual time=3044.658..3380.339 rows=1426425 loops=1)
+                                       Buffers: shared hit=9706 read=16033
+                                       ->  Sort  (cost=293183.27..297309.58 rows=1650522 width=44) (actual time=3044.626..3102.999 rows=1426425 loops=1)
+                                             Sort Key: cl.bene_id, cl.npi, cl.hcpcs_code, cl.service_date, cl.claim_id
+                                             Sort Method: quicksort  Memory: 149448kB
+                                             Buffers: shared hit=9706 read=16033
+                                             ->  Subquery Scan on cl  (cost=89719.38..122729.82 rows=1650522 width=44) (actual time=814.707..960.234 rows=1426425 loops=1)
+                                                   Buffers: shared hit=9700 read=16033
+                                                   ->  HashAggregate  (cost=89719.38..106224.60 rows=1650522 width=44) (actual time=814.705..904.119 rows=1426425 loops=1)
+                                                         Group Key: c.claim_id, c.bene_id, c.npi, c.service_date, l.hcpcs_code
+                                                         Batches: 1  Memory Usage: 155665kB
+                                                         Buffers: shared hit=9700 read=16033
+                                                         ->  Hash Join  (cost=32834.99..69087.85 rows=1650522 width=44) (actual time=130.572..480.566 rows=1650522 loops=1)
+                                                               Hash Cond: ((l.claim_id)::text = (c.claim_id)::text)
+                                                               Buffers: shared hit=9700 read=16033
+                                                               ->  Seq Scan on claim_lines l  (cost=0.00..31920.22 rows=1650522 width=18) (actual time=0.011..58.785 rows=1650522 loops=1)
+                                                                     Buffers: shared hit=5704 read=9711
+                                                               ->  Hash  (cost=20325.55..20325.55 rows=1000755 width=38) (actual time=130.115..130.115 rows=1000755 loops=1)
+                                                                     Buckets: 1048576  Batches: 1  Memory Usage: 78558kB
+                                                                     Buffers: shared hit=3996 read=6322
+                                                                     ->  Seq Scan on claims c  (cost=0.00..20325.55 rows=1000755 width=38) (actual time=0.009..50.143 rows=1000755 loops=1)
+                                                                           Buffers: shared hit=3996 read=6322
+ Planning:
+   Buffers: shared hit=264
+ Planning Time: 0.589 ms
+ JIT:
+   Functions: 47
+   Options: Inlining false, Optimization false, Expressions true, Deforming true
+   Timing: Generation 1.020 ms, Inlining 0.000 ms, Optimization 0.387 ms, Emission 10.587 ms, Total 11.994 ms
+ Execution Time: 3721.731 ms
+(56 rows)
+

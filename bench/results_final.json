@@ -1,0 +1,103 @@
+{
+  "provider_summary": {
+    "median_ms": 0.5,
+    "runs_ms": [
+      1.0,
+      0.5,
+      0.4,
+      0.5,
+      0.4
+    ],
+    "scans": [
+      "Bitmap Heap Scan:claims",
+      "Index Scan:claim_lines(claim_lines_pkey)",
+      "Index Scan:providers(providers_pkey)"
+    ]
+  },
+  "provider_claims": {
+    "median_ms": 0.2,
+    "runs_ms": [
+      0.2,
+      0.2,
+      0.2,
+      0.1,
+      0.1
+    ],
+    "scans": [
+      "Bitmap Heap Scan:claims",
+      "Index Scan:claim_lines(claim_lines_pkey)"
+    ]
+  },
+  "monthly_volume": {
+    "median_ms": 110.4,
+    "runs_ms": [
+      114.5,
+      109.4,
+      113.7,
+      110.4,
+      110.0
+    ],
+    "scans": [
+      "Bitmap Heap Scan:claims",
+      "Seq Scan:claim_lines",
+      "Seq Scan:providers"
+    ]
+  },
+  "hcpcs_pricing": {
+    "median_ms": 92.8,
+    "runs_ms": [
+      92.8,
+      93.4,
+      95.8,
+      92.1,
+      92.5
+    ],
+    "scans": [
+      "Seq Scan:claim_lines"
+    ]
+  },
+  "state_spend": {
+    "median_ms": 2578.0,
+    "runs_ms": [
+      2578.0,
+      2596.7,
+      2573.8,
+      2592.4,
+      2572.5
+    ],
+    "scans": [
+      "Seq Scan:claim_lines",
+      "Seq Scan:claims",
+      "Seq Scan:providers"
+    ]
+  },
+  "rule_price_inflation": {
+    "median_ms": 1560.1,
+    "runs_ms": [
+      1560.4,
+      1562.2,
+      1547.1,
+      1560.1,
+      1551.4
+    ],
+    "scans": [
+      "Seq Scan:claim_lines",
+      "Seq Scan:claims"
+    ]
+  },
+  "rule_duplicate_billing": {
+    "median_ms": 3976.5,
+    "runs_ms": [
+      3996.9,
+      3921.1,
+      3973.4,
+      4056.9,
+      3976.5
+    ],
+    "scans": [
+      "Index Only Scan:claims(ix_claims_npi_service_date)",
+      "Index Scan:claim_lines(claim_lines_pkey)",
+      "Index Scan:claims(claims_pkey)"
+    ]
+  }
+}

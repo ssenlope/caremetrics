@@ -1,0 +1,77 @@
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Left Join  (cost=638379.00..718578.88 rows=100076 width=63) (actual time=3732.886..3864.276 rows=39546 loops=1)
+   Hash Cond: (((claims.npi)::text = (dc.npi)::text) AND (((date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date) = dc.period))
+   Buffers: shared hit=422 read=39181, temp read=19196 written=19229
+   ->  Finalize GroupAggregate  (cost=1009.15..76680.56 rows=100076 width=23) (actual time=133.436..229.517 rows=39546 loops=1)
+         Group Key: claims.npi, ((date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date)
+         Buffers: shared hit=154 read=3285
+         ->  Gather Merge  (cost=1009.15..73428.09 rows=200152 width=23) (actual time=133.429..225.008 rows=42496 loops=1)
+               Workers Planned: 2
+               Workers Launched: 2
+               Buffers: shared hit=154 read=3285
+               ->  Partial GroupAggregate  (cost=9.13..49325.56 rows=100076 width=23) (actual time=78.063..170.971 rows=14165 loops=3)
+                     Group Key: claims.npi, ((date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date)
+                     Buffers: shared hit=154 read=3285
+                     ->  Incremental Sort  (cost=9.13..44446.87 rows=416981 width=15) (actual time=78.055..156.570 rows=333585 loops=3)
+                           Sort Key: claims.npi, ((date_trunc('quarter'::text, (claims.service_date)::timestamp with time zone))::date)
+                           Presorted Key: claims.npi
+                           Full-sort Groups: 146  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+                           Pre-sorted Groups: 130  Sort Method: quicksort  Average Memory: 30kB  Peak Memory: 30kB
+                           Buffers: shared hit=154 read=3285
+                           Worker 0:  Full-sort Groups: 3064  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+                             Pre-sorted Groups: 2757  Sort Method: quicksort  Average Memory: 134kB  Peak Memory: 226kB
+                           Worker 1:  Full-sort Groups: 3065  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+                             Pre-sorted Groups: 2773  Sort Method: quicksort  Average Memory: 141kB  Peak Memory: 330kB
+                           ->  Parallel Index Only Scan using ix_claims_npi_service_date on claims  (cost=0.42..25521.37 rows=416981 width=15) (actual time=77.958..126.023 rows=333585 loops=3)
+                                 Heap Fetches: 0
+                                 Buffers: shared hit=6 read=3285
+   ->  Hash  (cost=637126.57..637126.57 rows=16219 width=23) (actual time=3599.417..3599.421 rows=236 loops=1)
+         Buckets: 16384  Batches: 1  Memory Usage: 141kB
+         Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+         ->  Subquery Scan on dc  (cost=636802.19..637126.57 rows=16219 width=23) (actual time=3599.300..3599.384 rows=236 loops=1)
+               Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+               ->  HashAggregate  (cost=636802.19..636964.38 rows=16219 width=23) (actual time=3599.299..3599.374 rows=236 loops=1)
+                     Group Key: lagged.npi, ((date_trunc('quarter'::text, (lagged.service_date)::timestamp with time zone))::date)
+                     Batches: 1  Memory Usage: 801kB
+                     Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+                     ->  HashAggregate  (cost=623603.62..633963.86 rows=162190 width=27) (actual time=3599.030..3599.202 rows=797 loops=1)
+                           Group Key: lagged.claim_id, lagged.npi, (date_trunc('quarter'::text, (lagged.service_date)::timestamp with time zone))::date
+                           Planned Partitions: 4  Batches: 1  Memory Usage: 1617kB
+                           Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+                           ->  Subquery Scan on lagged  (cost=504112.71..578386.20 rows=550174 width=27) (actual time=3068.982..3598.518 rows=1110 loops=1)
+                                 Filter: (lagged.gap <= 3)
+                                 Rows Removed by Filter: 1425315
+                                 Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+                                 ->  WindowAgg  (cost=504112.71..553628.37 rows=1650522 width=48) (actual time=3068.935..3567.848 rows=1426425 loops=1)
+                                       Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+                                       ->  Sort  (cost=504112.71..508239.01 rows=1650522 width=44) (actual time=3068.908..3307.307 rows=1426425 loops=1)
+                                             Sort Key: cl.bene_id, cl.npi, cl.hcpcs_code, cl.service_date, cl.claim_id
+                                             Sort Method: external merge  Disk: 76792kB
+                                             Buffers: shared hit=268 read=35896, temp read=19196 written=19229
+                                             ->  Subquery Scan on cl  (cost=1.05..232110.25 rows=1650522 width=44) (actual time=0.080..1248.645 rows=1426425 loops=1)
+                                                   Buffers: shared hit=268 read=35896
+                                                   ->  Unique  (cost=1.05..215605.03 rows=1650522 width=44) (actual time=0.078..1171.041 rows=1426425 loops=1)
+                                                         Buffers: shared hit=268 read=35896
+                                                         ->  Incremental Sort  (cost=1.05..194973.51 rows=1650522 width=44) (actual time=0.077..1061.063 rows=1650522 loops=1)
+                                                               Sort Key: c.claim_id, c.bene_id, c.npi, c.service_date, l.hcpcs_code
+                                                               Presorted Key: c.claim_id
+                                                               Full-sort Groups: 50719  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+                                                               Buffers: shared hit=268 read=35896
+                                                               ->  Merge Join  (cost=0.85..149750.45 rows=1650522 width=44) (actual time=0.038..465.997 rows=1650522 loops=1)
+                                                                     Merge Cond: ((c.claim_id)::text = (l.claim_id)::text)
+                                                                     Buffers: shared hit=268 read=35896
+                                                                     ->  Index Scan using claims_pkey on claims c  (cost=0.42..40756.75 rows=1000755 width=38) (actual time=0.024..76.347 rows=1000755 loops=1)
+                                                                           Buffers: shared hit=3 read=14152
+                                                                     ->  Index Scan using claim_lines_pkey on claim_lines l  (cost=0.43..85860.29 rows=1650522 width=18) (actual time=0.009..108.571 rows=1650522 loops=1)
+                                                                           Buffers: shared hit=265 read=21744
+ Planning:
+   Buffers: shared hit=239 read=25
+ Planning Time: 0.656 ms
+ JIT:
+   Functions: 53
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 1.279 ms, Inlining 106.599 ms, Optimization 65.069 ms, Emission 62.202 ms, Total 235.149 ms
+ Execution Time: 3878.723 ms
+(73 rows)
+

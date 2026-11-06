@@ -130,7 +130,8 @@ Indexes add about 33 MB (claims primary key: 30 MB). Write overhead not yet meas
 
 Takeaway: indexes fixed lookups by provider but did nothing for full-table aggregations
 (state_spend, hcpcs_pricing, rule scoring). For state_spend, rewriting the query helped; see below.
-## Query Rewrite: state_spend (round 2)
+## Query Rewrites (round 2)
+### state_spend
 **Problem:** Adding indexes did not help `state_spend` (2,558 ms). The plan showed the time was spent in the aggregation, not in finding rows: `COUNT(DISTINCT ...)` forced the database to sort 1.65M joined rows by (state, npi), spilling about 30 MB per worker to disk.
 
 **Change:** Aggregate before joining. Lines are summed per claim, claims per provider, and providers per state. Each claim then appears once, so no DISTINCT is needed and the final grouping runs on 5,000 rows instead of 1.65M.
@@ -143,6 +144,24 @@ Takeaway: indexes fixed lookups by provider but did nothing for full-table aggre
 | API response via curl (3 runs) | about 2.41 s | about 0.65 s | about 3.7x |
 
 **Trade-off:** The SQL is longer and harder to read. It relies on `claim_id` being unique in `claims`, which the primary key guarantees.
+### duplicate_billing (rule scoring query)
+**Problem:** The rule took 6.3 s. The plan showed the same 1.4M-row intermediate result being sorted twice for a self-join (each sort spilled about 75 MB to disk), and 1.4M rows were paired with themselves and then filtered out.
+
+**Change:** Replaced the self-join with a `LAG` window function over (bene, provider, code) ordered by date, so there is one sort instead of two.
+
+**Correctness:** A two-way `EXCEPT` on every column of the rule output returned 0 differing rows out of 39,546. Detection metrics are unchanged (precision@100 stayed at 67%).
+
+All timings are the median of 5 runs.
+| Measure | Before | After | Speedup |
+|---|---|---|---|
+| EXPLAIN ANALYZE (median) | 6,300 ms | 3,890 ms | about 1.6x |
+
+**Also tried:** Raising `work_mem` to 256 MB so the remaining sort stayed in memory. The query went from about 3.89 s to 3.74 s (within run-to-run noise), so the disk spill was not the main cost. I kept the default setting.
+
+**Trade-off:** The query is harder to read, and the remaining time is spent elsewhere (building and de-duplicating the 1.4M-row claim/code set), which I did not dig into further.
+Baseline 6.3 s. The plan showed the time went into sorting the same 1.4M-row intermediate result twice for a self-join (both sorts spilled about 75 MB to disk), and 1.4M rows being paired with themselves and then filtered out. Rewriting with a LAG window function (one sort per bene/provider/code group) cut it to about 3.9 s (1.6x). The rewrite was proven equivalent with a two-way EXCEPT on every column of the rule output (0 differing rows out of 39,546), so detection metrics are unchanged.
+
+I also tried raising work_mem to 256 MB so the remaining sort would stay in memory. The sort did move to memory, but the query only went from about 3.89 s to 3.74 s (within run-to-run noise), so the disk spill was not the main cost. I kept the default setting.
 
 ## Known Limitations
 - Synthetic data does not reproduce real-world claim distributions, prices, or NPI structure.
